@@ -1,0 +1,63 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <queries>
+        <package android:name="com.openai.chatgpt" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="Rokid ChatGPT Bridge"
+        android:theme="@style/Theme.RokidBridge">
+
+        <activity
+            android:name=".SetupActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".BridgeAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <service
+            android:name=".RokidBridgePluginService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.anezium.rokidbus.action.PLUGIN" />
+            </intent-filter>
+
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.ID"
+                android:value="chatgpt_bridge" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.DISPLAY_NAME"
+                android:value="ChatGPT Bridge" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.API_VERSION"
+                android:value="3" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.CAPABILITIES"
+                android:value="surfaces,stt,tts" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.RECEIVE_PREFIXES"
+                android:value="/plugin/chatgpt_bridge,/system/plugin,/stt,/tts/started,/tts/done" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.SETTINGS_ACTIVITY"
+                android:value=".SetupActivity" />
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.LAUNCHABLE"
+                android:value="true" />
+        </service>
+    </application>
+</manifest>
