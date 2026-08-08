@@ -11,17 +11,8 @@ android {
         applicationId = "com.furini.rokidchatgptbridge"
         minSdk = 30
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3"
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlin {
-        jvmToolchain(17)
+        versionCode = 4
+        versionName = "0.4"
     }
 
     buildFeatures {

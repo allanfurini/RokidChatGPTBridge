@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <queries>
+        <intent>
+            <action android:name="com.anezium.rokidbus.action.HUB" />
+        </intent>
         <package android:name="com.openai.chatgpt" />
     </queries>
 
@@ -11,12 +18,7 @@
 
         <activity
             android:name=".SetupActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="true" />
 
         <service
             android:name=".BridgeAccessibilityService"
@@ -32,7 +34,13 @@
 
         <service
             android:name=".RokidBridgePluginService"
-            android:exported="true">
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="glasses-session" />
+
             <intent-filter>
                 <action android:name="com.anezium.rokidbus.action.PLUGIN" />
             </intent-filter>
@@ -40,21 +48,31 @@
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.ID"
                 android:value="chatgpt_bridge" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.DISPLAY_NAME"
                 android:value="ChatGPT Bridge" />
+
+            <meta-data
+                android:name="com.anezium.rokidbus.plugin.ICON"
+                android:value="chat" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.API_VERSION"
                 android:value="3" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.CAPABILITIES"
                 android:value="surfaces,stt,tts" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.RECEIVE_PREFIXES"
                 android:value="/plugin/chatgpt_bridge,/system/plugin,/stt,/tts/started,/tts/done" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.SETTINGS_ACTIVITY"
                 android:value=".SetupActivity" />
+
             <meta-data
                 android:name="com.anezium.rokidbus.plugin.LAUNCHABLE"
                 android:value="true" />
