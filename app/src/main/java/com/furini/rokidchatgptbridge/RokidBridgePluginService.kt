@@ -24,32 +24,24 @@ class RokidBridgePluginService : NexusPluginService() {
 
     private val speechCallbacks = object : NexusSpeechCallbacks {
         override fun onSpeechStarted(realtime: Boolean) {
-            show(
-                title = "Ouvindo…",
-                body = "Fale normalmente.",
-                footer = "microfone do Rokid"
-            )
+            DiagnosticStore.add(this@RokidBridgePluginService, "Microfone/STT iniciado.")
+            show("Ouvindo…", "Fale normalmente.", "microfone do Rokid")
         }
 
-        override fun onSpeechState(state: NexusSpeechState) = Unit
+        override fun onSpeechState(state: NexusSpeechState) {
+            DiagnosticStore.add(this@RokidBridgePluginService, "STT: $state")
+        }
 
         override fun onSpeechPartial(text: String) {
             if (text.isNotBlank()) {
-                show(
-                    title = "Você",
-                    body = text,
-                    footer = "ouvindo…"
-                )
+                show("Você", text, "ouvindo…")
             }
         }
 
         override fun onSpeechFinal(text: String) {
             if (text.isBlank()) return
-            show(
-                title = "Você",
-                body = text,
-                footer = "enviando ao ChatGPT…"
-            )
+            DiagnosticStore.add(this@RokidBridgePluginService, "Fala final recebida do Rokid.")
+            show("Você", text, "enviando ao ChatGPT…")
             sendToOfficialChatGpt(text)
         }
 
@@ -58,35 +50,40 @@ class RokidBridgePluginService : NexusPluginService() {
             error: NexusSpeechError?,
         ) {
             speech = null
+            DiagnosticStore.add(
+                this@RokidBridgePluginService,
+                "STT encerrado: $reason" + if (error != null) " (erro)" else ""
+            )
             if (error != null) {
-                show(
-                    title = "Voz",
-                    body = "Não consegui reconhecer a fala.",
-                    footer = "toque para tentar novamente"
-                )
+                show("Voz", "Não consegui reconhecer a fala.", "tente novamente")
             }
         }
     }
 
     private val ttsCallbacks = object : NexusTtsCallbacks {
-        override fun onTtsStarted(utteranceId: String) = Unit
+        override fun onTtsStarted(utteranceId: String) {
+            DiagnosticStore.add(this@RokidBridgePluginService, "TTS iniciado.")
+        }
 
         override fun onTtsDone(
             utteranceId: String,
             reason: NexusTtsDoneReason,
-        ) = Unit
+        ) {
+            DiagnosticStore.add(this@RokidBridgePluginService, "TTS encerrado: $reason")
+        }
     }
 
     override fun onNexusOpen() {
         BridgeState.plugin = this
+        DiagnosticStore.add(this, "Plugin Nexus aberto.")
 
         surface?.hide()
         surface = nexusSurfaceSession(SURFACE_ID)
 
         show(
-            title = "ChatGPT",
-            body = "Toque no centro ou use o botão de IA e fale.",
-            footer = "Rokid → celular → ChatGPT"
+            title = "ChatGPT Bridge",
+            body = "Conectado. Toque no centro ou use o botão de IA e fale.",
+            footer = "v0.5 diagnóstico"
         )
 
         if (tts == null) {
@@ -95,12 +92,12 @@ class RokidBridgePluginService : NexusPluginService() {
     }
 
     override fun onNexusClose() {
+        DiagnosticStore.add(this, "Plugin Nexus fechado.")
+
         speech?.stop()
         speech = null
-
         tts?.close()
         tts = null
-
         surface?.hide()
         surface = null
 
@@ -111,69 +108,92 @@ class RokidBridgePluginService : NexusPluginService() {
 
     override fun onNexusGlassesAiButton(active: Boolean) {
         if (active) {
+            DiagnosticStore.add(this, "Botão AI do Rokid acionado.")
             beginSpeech()
         }
     }
 
     override fun onNexusInput(event: NexusInputEvent) {
         if (event.action != KeyEvent.ACTION_DOWN) return
-
         when (event.keyCode) {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_DPAD_CENTER -> beginSpeech()
-
             KeyEvent.KEYCODE_BACK -> surface?.hide()
         }
     }
 
+    fun testHudFromPhone(): Boolean {
+        if (surface == null) return false
+        DiagnosticStore.add(this, "Teste manual do HUD enviado.")
+        show(
+            "TESTE HUD",
+            "Se você está lendo isto nos óculos, o caminho celular → Nexus → Rokid está funcionando.",
+            "Rokid ChatGPT Bridge v0.5"
+        )
+        return true
+    }
+
+    fun startSpeechFromPhone(): Boolean {
+        if (surface == null) return false
+        DiagnosticStore.add(this, "Teste manual de microfone solicitado.")
+        beginSpeech()
+        return true
+    }
+
+    fun testTtsFromPhone(): Boolean {
+        if (surface == null) return false
+        DiagnosticStore.add(this, "Teste manual de TTS solicitado.")
+        val session = tts ?: nexusTtsSession(ttsCallbacks)?.also { tts = it }
+        session?.speak("Teste de áudio do Rokid ChatGPT Bridge.")
+        return session != null
+    }
+
     private fun beginSpeech() {
-        if (speech != null) return
+        if (speech != null) {
+            DiagnosticStore.add(this, "STT já estava ativo.")
+            return
+        }
 
         val newSpeech = nexusSpeechSession(speechCallbacks)
         if (newSpeech == null) {
-            show(
-                title = "Voz",
-                body = "Speech-to-text indisponível.",
-                footer = "verifique o acesso do plugin no Nexus"
-            )
+            DiagnosticStore.add(this, "Falha ao criar sessão STT.")
+            show("Voz", "Speech-to-text indisponível.", "verifique permissões Nexus")
             return
         }
 
         speech = newSpeech
 
         when (newSpeech.start(language = "pt")) {
-            NexusSdkResult.SENT -> Unit
+            NexusSdkResult.SENT -> DiagnosticStore.add(this, "Pedido STT enviado ao Nexus.")
 
             NexusSdkResult.CAPABILITY_NOT_GRANTED -> {
                 speech = null
-                show(
-                    title = "Permissão",
-                    body = "Libere Speech to text para este plugin no Rokid Nexus.",
-                    footer = "Nexus → Settings → Plugin access"
-                )
+                DiagnosticStore.add(this, "Permissão STT não concedida.")
+                show("Permissão", "Libere Speech to text no Nexus.", "Plugin access")
+            }
+
+            NexusSdkResult.NOT_REGISTERED -> {
+                speech = null
+                DiagnosticStore.add(this, "Plugin ainda não registrado/aprovado no Nexus.")
+                show("Nexus", "Plugin ainda não aprovado.", "Plugin access")
             }
 
             else -> {
                 speech = null
-                show(
-                    title = "Voz",
-                    body = "Não consegui iniciar a escuta.",
-                    footer = "toque para tentar novamente"
-                )
+                DiagnosticStore.add(this, "Nexus recusou início do STT.")
+                show("Voz", "Não consegui iniciar a escuta.", "tente novamente")
             }
         }
     }
 
     private fun sendToOfficialChatGpt(text: String) {
         BridgeState.pendingPrompt = text
+        DiagnosticStore.add(this, "Pergunta preparada para o ChatGPT.")
 
         val launch = packageManager.getLaunchIntentForPackage(CHATGPT_PACKAGE)
         if (launch == null) {
-            show(
-                title = "ChatGPT",
-                body = "O aplicativo oficial do ChatGPT não foi encontrado no celular.",
-                footer = "instale o ChatGPT oficial"
-            )
+            DiagnosticStore.add(this, "ChatGPT oficial não encontrado.")
+            show("ChatGPT", "App oficial não encontrado.", "instale no celular")
             return
         }
 
@@ -181,9 +201,9 @@ class RokidBridgePluginService : NexusPluginService() {
         startActivity(launch)
 
         show(
-            title = "ChatGPT",
-            body = "Abrindo sua conversa no celular…",
-            footer = "aguarde"
+            "ChatGPT",
+            "Abrindo a conversa no celular…",
+            "aguarde"
         )
     }
 
@@ -191,11 +211,8 @@ class RokidBridgePluginService : NexusPluginService() {
         val answer = extractLikelyAssistantAnswer(text)
         if (answer.isBlank()) return
 
-        show(
-            title = "ChatGPT",
-            body = answer,
-            footer = "toque para falar novamente"
-        )
+        DiagnosticStore.add(this, "Texto visível do ChatGPT recebido.")
+        show("ChatGPT", answer, "toque para falar novamente")
 
         val session = tts ?: nexusTtsSession(ttsCallbacks)?.also { tts = it }
         session?.speak(answer.take(900))
@@ -208,8 +225,7 @@ class RokidBridgePluginService : NexusPluginService() {
 
         if (lines.isEmpty()) return ""
 
-        return lines
-            .takeLast(12)
+        return lines.takeLast(12)
             .joinToString("\n")
             .take(1000)
     }
@@ -217,10 +233,7 @@ class RokidBridgePluginService : NexusPluginService() {
     private fun show(title: String, body: String, footer: String) {
         val card = NexusCard(
             title = title.take(120),
-            lines = body
-                .replace('\n', ' ')
-                .chunked(220)
-                .take(8),
+            lines = body.replace('\n', ' ').chunked(220).take(8),
             footer = footer.take(240),
             contentKey = "chatgpt-bridge",
             handlesBack = true,

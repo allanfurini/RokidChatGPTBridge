@@ -7,6 +7,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 class BridgeAccessibilityService : AccessibilityService() {
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        DiagnosticStore.add(this, "Serviço de acessibilidade conectado.")
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.packageName?.toString() != CHATGPT_PACKAGE) return
         val root = rootInActiveWindow ?: return
@@ -14,6 +19,7 @@ class BridgeAccessibilityService : AccessibilityService() {
         BridgeState.pendingPrompt?.let { prompt ->
             if (injectPrompt(root, prompt)) {
                 BridgeState.pendingPrompt = null
+                DiagnosticStore.add(this, "Texto inserido no ChatGPT.")
             }
         }
 
@@ -23,24 +29,34 @@ class BridgeAccessibilityService : AccessibilityService() {
 
         if (normalized.isNotBlank() && normalized != BridgeState.latestVisibleText) {
             BridgeState.latestVisibleText = normalized
+            DiagnosticStore.add(this, "Mudança de texto detectada no ChatGPT.")
             BridgeState.plugin?.onChatGptVisibleText(normalized)
         }
     }
 
-    override fun onInterrupt() = Unit
+    override fun onInterrupt() {
+        DiagnosticStore.add(this, "Acessibilidade interrompida.")
+    }
 
     private fun injectPrompt(root: AccessibilityNodeInfo, prompt: String): Boolean {
-        val editable = findEditable(root) ?: return false
+        val editable = findEditable(root) ?: run {
+            DiagnosticStore.add(this, "Caixa de texto do ChatGPT não encontrada.")
+            return false
+        }
+
         val args = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                 prompt
             )
         }
-        val set = editable.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        if (!set) return false
 
-        // Heurística para achar botão Enviar/Send depois de inserir o texto.
+        val set = editable.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (!set) {
+            DiagnosticStore.add(this, "Falha ao inserir texto na caixa do ChatGPT.")
+            return false
+        }
+
         val send = findNode(root) { node ->
             if (!node.isClickable) return@findNode false
             val label = (
@@ -54,11 +70,15 @@ class BridgeAccessibilityService : AccessibilityService() {
         }
 
         if (send != null) {
-            send.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            val clicked = send.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            DiagnosticStore.add(
+                this,
+                if (clicked) "Botão Enviar acionado." else "Botão Enviar encontrado, mas clique falhou."
+            )
             return true
         }
 
-        // Alguns builds disparam IME action mesmo sem botão textual detectável.
+        DiagnosticStore.add(this, "Texto inserido, mas botão Enviar não foi identificado.")
         editable.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         return true
     }
@@ -100,6 +120,7 @@ class BridgeAccessibilityService : AccessibilityService() {
             "chatgpt", "novo chat", "new chat", "enviar", "send",
             "copiar", "copy", "parar", "stop", "voz", "voice"
         )
+
         return items
             .map { it.replace(Regex("\\s+"), " ").trim() }
             .filter { value ->

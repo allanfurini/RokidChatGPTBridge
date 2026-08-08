@@ -8,6 +8,7 @@
         <intent>
             <action android:name="com.anezium.rokidbus.action.HUB" />
         </intent>
+        <package android:name="com.anezium.rokidbus.phone" />
         <package android:name="com.openai.chatgpt" />
     </queries>
 
@@ -18,7 +19,12 @@
 
         <activity
             android:name=".SetupActivity"
-            android:exported="true" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".BridgeAccessibilityService"

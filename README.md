@@ -1,27 +1,31 @@
-# Rokid ChatGPT Bridge v0.3
+# Rokid ChatGPT Bridge v0.5 — diagnóstico visível
 
-Protótipo Android para usar o **ChatGPT oficial no celular** e o **Rokid Glasses como voz/HUD**, sem chave da API da OpenAI.
+Esta versão aparece com ícone normal no celular e continua sendo um plugin do Rokid Nexus.
 
-## Fluxo pretendido
+## O que testar
 
-Rokid Glasses → fala → Rokid Nexus STT → celular → aplicativo oficial ChatGPT
-→ Accessibility captura a conversa visível → Rokid Nexus → HUD dos óculos.
+1. Abra o ícone **Rokid ChatGPT Bridge** no celular.
+2. Ative a acessibilidade.
+3. Abra o Rokid Nexus e aprove o plugin **ChatGPT Bridge** com:
+   - Surfaces
+   - Speech-to-text
+   - Text-to-speech
+4. Abra o plugin pelo launcher dos óculos.
+5. Volte ao painel do celular. Ele deve mostrar:
+   - ChatGPT instalado
+   - Rokid Nexus instalado
+   - Acessibilidade ativa
+   - Plugin Nexus aberto/conectado
+6. Use:
+   - **Testar HUD agora**
+   - **Testar microfone do Rokid**
+   - **Testar áudio/TTS**
+   - **Enviar teste ao ChatGPT**
 
-## O que esta versão testa
+O painel registra um log local de diagnóstico sem guardar o conteúdo completo das suas falas/respostas.
 
-- integração como plugin do Rokid Nexus;
-- Speech-to-text do Nexus;
-- abertura do app oficial do ChatGPT;
-- tentativa de inserir a fala na conversa aberta via Accessibility;
-- captura do texto visível do ChatGPT;
-- retorno do texto ao HUD;
-- TTS opcional pelo Nexus.
+## Objetivo final
 
-## Importante
+Rokid → voz → Nexus STT → ChatGPT oficial no celular → Accessibility → HUD/TTS do Rokid.
 
-Esta é uma **versão de teste**, não uma versão final. A parte mais provável de precisar de ajuste é a automação da interface do aplicativo ChatGPT, porque a árvore de acessibilidade pode variar entre versões do app.
-
-## Compilação
-
-O projeto já contém `.github/workflows/build-apk.yml`.
-Ele usa GitHub Actions e **não depende de `gradlew` nem de Gradle Wrapper no ZIP**.
+Não usa a API da OpenAI.
