@@ -10,7 +10,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://jitpack.io")
+        maven { url = uri("https://maven.rokid.com/repository/maven-public/") }
     }
 }
 rootProject.name = "RokidChatGPTBridge"

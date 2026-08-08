@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.furini.rokidchatgptbridge"
-        minSdk = 30
+        minSdk = 31
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5"
+        versionCode = 6
+        versionName = "0.6"
     }
 
     compileOptions {
@@ -30,5 +30,5 @@ kotlin {
 }
 
 dependencies {
-    implementation("com.github.Anezium.Rokid-Nexus:bus-client:sdk-v0.13.0")
+    implementation("com.rokid.cxr:client-l:1.0.1")
 }

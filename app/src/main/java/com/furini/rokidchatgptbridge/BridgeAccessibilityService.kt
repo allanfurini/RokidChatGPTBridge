@@ -30,7 +30,10 @@ class BridgeAccessibilityService : AccessibilityService() {
         if (normalized.isNotBlank() && normalized != BridgeState.latestVisibleText) {
             BridgeState.latestVisibleText = normalized
             DiagnosticStore.add(this, "Mudança de texto detectada no ChatGPT.")
-            BridgeState.plugin?.onChatGptVisibleText(normalized)
+            BridgeState.cxrManager?.showText(
+                "ChatGPT",
+                normalized.lines().takeLast(12).joinToString("\n").take(1200)
+            )
         }
     }
 

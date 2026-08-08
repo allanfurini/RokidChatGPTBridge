@@ -1,8 +1,10 @@
 package com.furini.rokidchatgptbridge
 
+import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -15,17 +17,21 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.lang.reflect.Field
+import java.lang.reflect.Method
 
 class SetupActivity : Activity() {
 
-    private lateinit var statusText: TextView
-    private lateinit var logText: TextView
-    private lateinit var promptText: EditText
+    private lateinit var status: TextView
+    private lateinit var log: TextView
+    private lateinit var prompt: EditText
+    private val cxr by lazy { HiRokidCxrManager(this).also { BridgeState.cxrManager = it } }
+    private var speech: CxrSpeechRecognizer? = null
     private val handler = Handler(Looper.getMainLooper())
 
-    private val refresher = object : Runnable {
+    private val refresh = object : Runnable {
         override fun run() {
-            refreshStatus()
+            updateStatus()
             handler.postDelayed(this, 1000)
         }
     }
@@ -33,154 +39,227 @@ class SetupActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val content = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 38, 28, 40)
+            setPadding(24, 30, 24, 40)
             setBackgroundColor(Color.BLACK)
         }
 
-        content.addView(TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = "Rokid ChatGPT Bridge"
-            textSize = 25f
+            textSize = 24f
             setTextColor(Color.WHITE)
         })
-
-        content.addView(TextView(this).apply {
-            text = "v0.5 • painel de diagnóstico • sem API OpenAI"
-            textSize = 15f
+        root.addView(TextView(this).apply {
+            text = "v0.6 • Hi Rokid CXR-L direto • sem API OpenAI"
+            textSize = 14f
             setTextColor(Color.LTGRAY)
-            setPadding(0, 8, 0, 20)
+            setPadding(0, 4, 0, 16)
         })
 
-        statusText = TextView(this).apply {
+        status = TextView(this).apply {
             textSize = 16f
             setTextColor(Color.WHITE)
-            setPadding(0, 6, 0, 16)
+            setPadding(0, 0, 0, 15)
         }
-        content.addView(statusText)
+        root.addView(status)
 
-        content.addView(button("1. Ativar acessibilidade") {
+        root.addView(btn("1. Ativar acessibilidade") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
 
-        content.addView(button("2. Abrir Rokid Nexus") {
-            openPackage("com.anezium.rokidbus.phone", "Rokid Nexus não encontrado.")
+        root.addView(btn("2. Autorizar no Hi Rokid") {
+            startHiRokidAuthorization()
         })
 
-        content.addView(button("3. Abrir ChatGPT oficial") {
-            openPackage("com.openai.chatgpt", "ChatGPT oficial não encontrado.")
+        root.addView(btn("3. Abrir Hi Rokid") {
+            openPkg(HI_ROKID, "Hi Rokid não encontrado.")
         })
 
-        content.addView(button("4. Testar HUD agora") {
-            val ok = BridgeState.plugin?.testHudFromPhone() == true
-            if (!ok) {
-                toast("Abra primeiro o plugin ChatGPT Bridge no Rokid Nexus/óculos.")
+        root.addView(btn("4. Testar HUD no óculos") {
+            cxr.showText(
+                "TESTE HUD",
+                "Se você lê isto no Rokid, o CXR-L direto está funcionando."
+            )
+        })
+
+        root.addView(btn("5. Falar pelo microfone do Rokid") {
+            requestPermissionsIfNeeded()
+            speech?.stop()
+            speech = CxrSpeechRecognizer(this, cxr) { text ->
+                runOnUiThread {
+                    cxr.showText("Você disse", text)
+                    BridgeState.pendingPrompt = text
+                    openPkg(CHATGPT, "ChatGPT não encontrado.")
+                }
+            }
+            if (speech?.start() != true) {
+                toast("Não consegui iniciar o teste de voz. Veja o LOG.")
             }
         })
 
-        content.addView(button("5. Testar microfone do Rokid") {
-            val ok = BridgeState.plugin?.startSpeechFromPhone() == true
-            if (!ok) {
-                toast("Abra primeiro o plugin ChatGPT Bridge no Rokid Nexus/óculos.")
-            }
+        root.addView(btn("6. Parar microfone") {
+            speech?.stop()
         })
 
-        content.addView(button("6. Testar áudio/TTS") {
-            val ok = BridgeState.plugin?.testTtsFromPhone() == true
-            if (!ok) {
-                toast("Abra primeiro o plugin ChatGPT Bridge no Rokid Nexus/óculos.")
-            }
+        root.addView(btn("7. Abrir ChatGPT oficial") {
+            openPkg(CHATGPT, "ChatGPT não encontrado.")
         })
 
-        promptText = EditText(this).apply {
-            hint = "Frase para teste local no ChatGPT"
+        prompt = EditText(this).apply {
+            hint = "Frase de teste para o ChatGPT"
             setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
-            setSingleLine(false)
-            minLines = 2
-            setPadding(10, 18, 10, 18)
         }
-        content.addView(promptText)
+        root.addView(prompt)
 
-        content.addView(button("7. Enviar teste ao ChatGPT") {
-            val value = promptText.text?.toString()?.trim().orEmpty()
-            if (value.isBlank()) {
-                toast("Digite uma frase primeiro.")
-            } else if (!isAccessibilityEnabled()) {
-                toast("Ative primeiro a acessibilidade do Bridge.")
+        root.addView(btn("8. Enviar texto de teste ao ChatGPT") {
+            val s = prompt.text?.toString()?.trim().orEmpty()
+            if (s.isBlank()) {
+                toast("Digite uma frase.")
             } else {
-                BridgeState.pendingPrompt = value
-                DiagnosticStore.add(this, "Teste local preparado para o ChatGPT.")
-                openPackage("com.openai.chatgpt", "ChatGPT oficial não encontrado.")
+                BridgeState.pendingPrompt = s
+                openPkg(CHATGPT, "ChatGPT não encontrado.")
             }
         })
 
-        content.addView(button("Atualizar status") {
-            refreshStatus()
-        })
-
-        content.addView(button("Limpar log") {
+        root.addView(btn("Limpar log") {
             DiagnosticStore.clear(this)
-            refreshStatus()
+            updateStatus()
         })
 
-        content.addView(TextView(this).apply {
-            text = "LOG DE TESTE"
-            textSize = 16f
+        root.addView(TextView(this).apply {
+            text = "LOG"
             setTextColor(Color.WHITE)
-            setPadding(0, 24, 0, 8)
+            textSize = 16f
+            setPadding(0, 20, 0, 8)
         })
 
-        logText = TextView(this).apply {
-            textSize = 13f
+        log = TextView(this).apply {
             setTextColor(Color.LTGRAY)
-            setPadding(12, 12, 12, 12)
-            setBackgroundColor(Color.rgb(18, 18, 18))
+            textSize = 12f
+            setBackgroundColor(Color.rgb(18,18,18))
+            setPadding(10,10,10,10)
         }
-        content.addView(logText)
+        root.addView(log)
 
-        val scroll = ScrollView(this).apply {
+        setContentView(ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
-            addView(content)
-        }
-        setContentView(scroll)
+            addView(root)
+        })
 
-        DiagnosticStore.add(this, "Painel v0.5 aberto.")
-        refreshStatus()
+        DiagnosticStore.add(this, "v0.6 iniciada. Hi Rokid alvo: $HI_ROKID")
+        requestPermissionsIfNeeded()
+        updateStatus()
     }
 
     override fun onResume() {
         super.onResume()
-        handler.removeCallbacks(refresher)
-        handler.post(refresher)
+        handler.removeCallbacks(refresh)
+        handler.post(refresh)
     }
 
     override fun onPause() {
-        handler.removeCallbacks(refresher)
+        handler.removeCallbacks(refresh)
         super.onPause()
     }
 
-    private fun button(label: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            setOnClickListener { action() }
+    override fun onDestroy() {
+        speech?.stop()
+        super.onDestroy()
+    }
+
+    @Deprecated("Deprecated in Android SDK; retained for Hi Rokid auth result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != AUTH_REQUEST_CODE) return
+
+        val token = parseAuthToken(resultCode, data)
+        if (token.isBlank()) {
+            DiagnosticStore.add(this, "Autorização voltou sem token. Aprove a tela do Hi Rokid.")
+            toast("Autorização não concluída.")
+            return
         }
 
-    private fun refreshStatus() {
-        val chatGpt = packageManager.getLaunchIntentForPackage("com.openai.chatgpt") != null
-        val nexus = packageManager.getLaunchIntentForPackage("com.anezium.rokidbus.phone") != null
-        val accessibility = isAccessibilityEnabled()
-        val pluginOpen = BridgeState.plugin != null
+        getSharedPreferences("cxr", MODE_PRIVATE)
+            .edit()
+            .putString("token", token)
+            .apply()
 
-        statusText.text = buildString {
-            appendLine(if (chatGpt) "✅ ChatGPT instalado" else "❌ ChatGPT não encontrado")
-            appendLine(if (nexus) "✅ Rokid Nexus instalado" else "❌ Rokid Nexus não encontrado")
-            appendLine(if (accessibility) "✅ Acessibilidade ativa" else "❌ Acessibilidade desligada")
-            append(if (pluginOpen) "✅ Plugin Nexus aberto/conectado" else "⚪ Plugin Nexus ainda não está aberto")
+        DiagnosticStore.add(this, "Token Hi Rokid recebido (${token.length} chars).")
+        cxr.connect(token)
+    }
+
+    private fun startHiRokidAuthorization() {
+        try {
+            val intent = Intent().apply {
+                component = ComponentName(
+                    HI_ROKID,
+                    "com.rokid.sprite.aiapp.externalapp.auth.AuthorizationActivity"
+                )
+            }
+            DiagnosticStore.add(this, "Abrindo autorização do Hi Rokid...")
+            startActivityForResult(intent, AUTH_REQUEST_CODE)
+        } catch (t: Throwable) {
+            DiagnosticStore.add(this, "Falha ao abrir autorização: ${t.message}")
+            toast("Não consegui abrir a autorização do Hi Rokid.")
+        }
+    }
+
+    private fun parseAuthToken(resultCode: Int, data: Intent?): String {
+        try {
+            val helperClass = Class.forName(
+                "com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper"
+            )
+            val instanceField: Field = helperClass.getDeclaredField("INSTANCE")
+            val helper = instanceField.get(null)
+            val parse: Method = helperClass.getMethod(
+                "parseAuthorizationResult",
+                Int::class.javaPrimitiveType,
+                Intent::class.java
+            )
+            val result = parse.invoke(helper, resultCode, data)
+            if (result != null && result.javaClass.simpleName == "AuthSuccess") {
+                for (name in listOf("token", "authToken")) {
+                    try {
+                        val f = result.javaClass.getDeclaredField(name)
+                        f.isAccessible = true
+                        val v = f.get(result)
+                        if (v is String && v.isNotBlank()) return v
+                    } catch (_: Throwable) {}
+                }
+                for (name in listOf("getToken", "getAuthToken", "getAccessToken")) {
+                    try {
+                        val m = result.javaClass.getMethod(name)
+                        val v = m.invoke(result)
+                        if (v is String && v.isNotBlank()) return v
+                    } catch (_: Throwable) {}
+                }
+            }
+        } catch (t: Throwable) {
+            DiagnosticStore.add(this, "Parser oficial indisponível: ${t.javaClass.simpleName}")
+        }
+        return data?.getStringExtra("auth_token").orEmpty()
+    }
+
+    private fun updateStatus() {
+        val hi = packageManager.getLaunchIntentForPackage(HI_ROKID) != null
+        val chat = packageManager.getLaunchIntentForPackage(CHATGPT) != null
+        val access = isAccessibilityEnabled()
+        val savedToken = getSharedPreferences("cxr", MODE_PRIVATE)
+            .getString("token", null) != null
+
+        status.text = buildString {
+            appendLine(if (hi) "✅ Hi Rokid encontrado" else "❌ Hi Rokid não encontrado")
+            appendLine(if (chat) "✅ ChatGPT instalado" else "❌ ChatGPT não encontrado")
+            appendLine(if (access) "✅ Acessibilidade ativa" else "❌ Acessibilidade desligada")
+            appendLine(if (savedToken) "✅ Hi Rokid já autorizou o Bridge" else "⚪ Falta autorizar no Hi Rokid")
+            appendLine(if (BridgeState.glassBtConnected) "✅ Óculos Bluetooth detectados" else "⚪ Aguardando conexão dos óculos")
+            appendLine(if (BridgeState.cxrConnected) "✅ CXR-L conectado" else "⚪ CXR-L ainda não conectado")
+            append(if (BridgeState.sceneReady) "✅ HUD pronto" else "⚪ HUD ainda não abriu")
         }
 
-        val log = DiagnosticStore.read(this)
-        logText.text = if (log.isBlank()) "Nenhum evento registrado ainda." else log
+        log.text = DiagnosticStore.read(this).ifBlank { "Nenhum evento." }
     }
 
     private fun isAccessibilityEnabled(): Boolean {
@@ -190,14 +269,22 @@ class SetupActivity : Activity() {
             contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ).orEmpty()
-
-        return enabled.split(':').any {
-            it.equals(expected, ignoreCase = true)
-        }
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
     }
 
-    private fun openPackage(packageName: String, error: String) {
-        val launch = packageManager.getLaunchIntentForPackage(packageName)
+    private fun requestPermissionsIfNeeded() {
+        val wanted = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            wanted += Manifest.permission.RECORD_AUDIO
+        }
+        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            wanted += Manifest.permission.BLUETOOTH_CONNECT
+        }
+        if (wanted.isNotEmpty()) requestPermissions(wanted.toTypedArray(), 77)
+    }
+
+    private fun openPkg(pkg: String, error: String) {
+        val launch = packageManager.getLaunchIntentForPackage(pkg)
         if (launch == null) {
             toast(error)
             return
@@ -205,7 +292,17 @@ class SetupActivity : Activity() {
         startActivity(launch)
     }
 
-    private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    private fun btn(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        gravity = Gravity.CENTER
+        setOnClickListener { action() }
+    }
+
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+
+    companion object {
+        private const val HI_ROKID = "com.rokid.sprite.global.aiapp"
+        private const val CHATGPT = "com.openai.chatgpt"
+        private const val AUTH_REQUEST_CODE = 4027
     }
 }
